@@ -28,8 +28,60 @@ def checkIntersection(camerapos, ray_direction,center,radius):
     return t
 
 ''' TODO: Render the scene '''
-def render_scene(pixel_colors, e, d, image_width, image_height,spheres,plane_width, plane_height,aspect_ratio):
+def render_scene(pixel_colors, e, d, image_width, image_height,spheres,plane_width, plane_height,aspect_ratio,lightpos,lightI,lightC):
     
+    N= 800j
+    M = 800j
+    O = np.ones((int(N.imag), int(M.imag),3))
+    O[...,1],O[...,0] = np.mgrid[0.5:-0.5:N,1:-1:M] #image plane uvw coords
+    e_ = O/np.linalg.norm(O,axis=2)[:,:,np.newaxis] #normalize ray direction e_
+
+  
+    testsphere = spheres[0]
+    Cs = testsphere.center
+    r = testsphere.radius
+
+    OC_ = Cs-O #oreinted segment from origin to center
+
+    vec_dot = np.vectorize(np.dot,signature='(n),(m)->()') #vectorize dot product 
+    t = vec_dot(OC_,e_) #pixelwise dot product
+    Pe = O +e_*t[:,:,np.newaxis] #point on vector e_ projected from OC_ 
+    d = np.linalg.norm(Pe-Cs, axis=2) #distance from point pe to center
+
+    #find intersection position
+    i = (r**2 - d**2)**.5
+    Ps = O + e_*(t-i)[:,:,np.newaxis]
+
+    #Facing ratio(incidence value)
+    i_ = i[:,:,np.newaxis]/r
+
+    #calculate normal vector for each point
+    n = Ps - Cs
+    n_ = n/np.linalg.norm(n,axis=2)[:,:,np.newaxis]
+
+    #simple directional light model
+    Cd = testsphere.color #sphere diffuse color
+
+    #Key Light
+    l = lightpos
+    l_ = l/np.linalg.norm(l)
+    Kd = testsphere.kd
+    diff = Cd*Kd
+
+    #Back Light
+    l = np.array([1.5,-1,1])
+    l_ = l/np.linalg.norm(l)
+    Kd = testsphere.kd
+    diff += Cd*Kd*.25
+
+    output = np.zeros((int(N.imag),int(M.imag),3))
+    output [d < r] = (diff*i_) [d < r]
+
+    output[output<0] =0; output[output >1]= 1
+    return output
+
+
+    """
     testsphere = spheres[0]
     c = testsphere.center
     r = testsphere.radius
@@ -57,6 +109,7 @@ def render_scene(pixel_colors, e, d, image_width, image_height,spheres,plane_wid
                 pixel_colors[y][x] = 255
 
     return pixel_colors
+    """
 
             
 
@@ -104,9 +157,8 @@ if __name__ == "__main__":
         iii) Shade each pixel using Blinn-Phong Shading
     
     '''
-    image = render_scene(pixel_colors,camera_position,image_plane_dist,image_width,image_height,spheres,image_plane_width,image_plane_height,aspect_ratio)
+    image = render_scene(pixel_colors,camera_position,image_plane_dist,image_width,image_height,spheres,image_plane_width,image_plane_height,aspect_ratio, light_position,light_intensity,light_color)
 
-    # Display the image
-    plt.imshow(image)
-    # plt.axis('off')
+    fig,ax = plt.subplots(figsize =(16,10))
+    ax.imshow(image**(1/2.2))
     plt.show()
