@@ -1,6 +1,9 @@
+from typing import Annotated, Literal
 import numpy as np
 import matplotlib.pyplot as plt
-import math
+
+
+Point_3D = Annotated[np.typing.NDArray[np.float32], Literal[3]]
 
 # Define the scene
 class Sphere:
@@ -13,110 +16,77 @@ class Sphere:
         self.ks = ks  # Specular coefficient
         self.shininess = shininess  # he shininess factor for specular highlights
 
-def checkIntersection(camerapos, ray_direction,center,radius):
-    L = np.subtract(camerapos, center)
-    A = np.dot(ray_direction,ray_direction)
-    B = 2 * np.dot(ray_direction,L)
-    C = np.dot(L,L) - radius**2
-    discriminant = B**2 - 4*A*C
+def quadratic(A,B,C):
+    discriminant :np.float32= np.power(B,2) - (4*A*C)
     print(discriminant)
-
     if discriminant < 0:
-        return False
+        #returning none because there is no intersection
+        return None
     
-    t = (-B - math.sqrt(discriminant))/(2*A)
-    return t
+    discriminant = np.sqrt(discriminant)
+    t1 = ((-1*B)+discriminant) / (2*A) #getting solutions
+    t2 = ((-1*B)-discriminant) / (2*A)
+
+    return min(t1,t2) #returning the closest intersection
+
+
+
+def findIntersection(camerapos, ray,spheres):
+    sphere_index: int | None = None
+    sphere_intersection: int | None = None
+    a: np.float32 = np.dot(ray, ray)
+    for i in range(len(spheres)):
+        start_to_center: Point_3D = camerapos - spheres[i].center
+        b: np.float32 = np.dot(start_to_center, ray)
+        b += b
+        c: np.float32 = np.dot(start_to_center, start_to_center) - np.square(
+            spheres[i].radius
+        )
+
+        intersection: np.float32 = quadratic(a, b, c)
+        if intersection is not None:
+            if sphere_index is not None:
+                if intersection < sphere_intersection:
+                    sphere_index = i
+                    sphere_intersection = intersection
+            else:
+                sphere_index = i
+                sphere_intersection = intersection
+
+    return sphere_index
+
+def createray(e,position):
+    x = position[0] - e[0]
+    y = position[1] - e[1]
+    z = e[2] - position[2]
+    return np.array([x,y,z])
 
 ''' TODO: Render the scene '''
-def render_scene(pixel_colors, e, d, image_width, image_height,spheres,plane_width, plane_height,aspect_ratio,lightpos,lightI,lightC):
+def render_scene(height,width, plane_height, plane_width,aratio, e,d,spheres,lightpos,lightI,lightC,pixel_colors):
     
-    N= 800j
-    M = 800j
-    O = np.ones((int(N.imag), int(M.imag),3))
-    O[...,1],O[...,0] = np.mgrid[0.5:-0.5:N,1:-1:M] #image plane uvw coords
-    e_ = O/np.linalg.norm(O,axis=2)[:,:,np.newaxis] #normalize ray direction e_
+    #getting image and plane factors
+    positions = np.array([0,0,d+e[2]])
+    y = height/plane_height
+    x = width/plane_width
 
-  
-    testsphere = spheres[0]
-    Cs = testsphere.center
-    r = testsphere.radius
-
-    OC_ = Cs-O #oreinted segment from origin to center
-
-    vec_dot = np.vectorize(np.dot,signature='(n),(m)->()') #vectorize dot product 
-    t = vec_dot(OC_,e_) #pixelwise dot product
-    Pe = O +e_*t[:,:,np.newaxis] #point on vector e_ projected from OC_ 
-    d = np.linalg.norm(Pe-Cs, axis=2) #distance from point pe to center
-
-    #find intersection position
-    i = (r**2 - d**2)**.5
-    Ps = O + e_*(t-i)[:,:,np.newaxis]
-
-    #Facing ratio(incidence value)
-    i_ = i[:,:,np.newaxis]/r
-
-    #calculate normal vector for each point
-    n = Ps - Cs
-    n_ = n/np.linalg.norm(n,axis=2)[:,:,np.newaxis]
-
-    #simple directional light model
-    Cd = testsphere.color #sphere diffuse color
-
-    #Key Light
-    l = lightpos
-    l_ = l/np.linalg.norm(l)
-    Kd = testsphere.kd
-    diff = Cd*Kd
-
-    #Back Light
-    l = np.array([1.5,-1,1])
-    l_ = l/np.linalg.norm(l)
-    Kd = testsphere.kd
-    diff += Cd*Kd*.25
-
-    output = np.zeros((int(N.imag),int(M.imag),3))
-    output [d < r] = (diff*i_) [d < r]
-
-    output[output<0] =0; output[output >1]= 1
-    return output
-
-
-    """
-    testsphere = spheres[0]
-    c = testsphere.center
-    r = testsphere.radius
-
-    l=0
-    r= plane_width
-    t=0
-    b = plane_height
-
-    w = np.array([0,0,1])
-    u = np.array([0,1,0])
-    v = np.array([1,0,0])
-
-    for x in range(image_width):
-        for y in range(image_height):
-            pixel_pos_x = l + (((r-l)*(x-.5))/image_width)
-            pixel_pos_y = b + (((t-b)*(y +.5))/image_height)
-            ray_direction = np.add(-d*w,pixel_pos_x*u, pixel_pos_y*v)
-            ray_direction = np.subtract(ray_direction,e)
-            direction = ray_direction/np.linalg.norm(ray_direction)
-            print(direction)
-            t = checkIntersection(e,direction,c,r)
-            print(t)
-            if t and t >0:
-                pixel_colors[y][x] = 255
+    for j in range(len(pixel_colors)):
+        for i in range(len(pixel_colors)):
+            positions[0] = i/x -1
+            positions[1] = j/y -1
+            ray = createray(e,positions)
+            print(ray)
+            closestIntersection = findIntersection(e,ray,spheres)
+            print(closestIntersection)
+            if closestIntersection is not None:
+                pixel_colors[j,i] = spheres[closestIntersection].color
 
     return pixel_colors
-    """
-
-            
 
 
     
+   
 
-
+            
 # Main function
 if __name__ == "__main__":
     # Define spheres
@@ -157,8 +127,7 @@ if __name__ == "__main__":
         iii) Shade each pixel using Blinn-Phong Shading
     
     '''
-    image = render_scene(pixel_colors,camera_position,image_plane_dist,image_width,image_height,spheres,image_plane_width,image_plane_height,aspect_ratio, light_position,light_intensity,light_color)
+    image = render_scene(image_height,image_width,image_plane_height,image_plane_width,aspect_ratio,camera_position,image_plane_dist,spheres,light_position,light_intensity,light_color,pixel_colors)
 
-    fig,ax = plt.subplots(figsize =(16,10))
-    ax.imshow(image**(1/2.2))
+    plt.imshow(image)
     plt.show()
