@@ -55,11 +55,43 @@ def intersection(e,ray,spheres):
     return sphere_index
 
 
-def shade(sphere):
-    return sphere.color
+def shade(e,ray,sphere,lightI,lightP,lightC):
+    p =3 #phong coefficient, must be at least 2
+
+    #getting where intersection is
+    A = np.dot(ray, ray) #creating A for quadratic formula
+    start_to_center =e- sphere.center
+    B = np.dot(start_to_center, ray)
+    B += B
+    C = np.dot(start_to_center, start_to_center) - np.square(sphere.radius)
+
+    discriminant = np.power(B, 2) - (4 * A * C)
+    discriminant = np.sqrt(discriminant)
+    t1 = ((-1 * B) + discriminant) / (2 * A)
+    t2 = ((-1 * B) - discriminant) / (2 * A)
+    intersection = min(t1,t2) * ray + e
+    n = sphere.center-intersection
+    n = n/np.linalg.norm(n)
+
+    total_light = 0.0
+    l = intersection - lightP
+    l = l/np.linalg.norm(l)
+
+    diffuse = sphere.kd * lightI *max(0,np.dot(n,l))
+    total_light += diffuse
+
+    h = l + ray
+    h = h/np.linalg.norm(h)
+
+    specular = sphere.ks * lightI * np.power(max(0,np.dot(n,h)),p)
+    total_light+= specular
+
+    total_light += sphere.ka * 3.0 #multiplying by the ambient light to brighten image
+
+    return sphere.color*total_light*lightC
 
 
-def render_scene(image_height,image_width,plane_height,plane_width,pixel_colors,e,d,spheres):
+def render_scene(image_height,image_width,plane_height,plane_width,pixel_colors,e,d,spheres,lightI,lightP,lightC):
     """TODO:
     1. complete the function render_scene() to output the final image
     2. inside the render_scene() function, you need to implement:
@@ -85,7 +117,7 @@ def render_scene(image_height,image_width,plane_height,plane_width,pixel_colors,
 
             close_sphere: int = intersection(e, ray, spheres) #get the closest sphere that is intersected
             if close_sphere is not None:
-                pixel_colors[j, i] = shade(spheres[close_sphere])
+                pixel_colors[j, i] = shade(e,ray,spheres[close_sphere],lightI,lightP,lightC)
 
     return pixel_colors
 
@@ -120,7 +152,7 @@ if __name__ == "__main__":
     # Distance between the camera and the image plane
     image_plane_dist = 1.0
 
-    image= render_scene(image_height,image_width,image_plane_height,image_plane_width,pixel_colors,camera_position,image_plane_dist, spheres)
+    image= render_scene(image_height,image_width,image_plane_height,image_plane_width,pixel_colors,camera_position,image_plane_dist, spheres,light_intensity,light_position,light_color)
 
     # Display the image
     plt.imshow(image)
